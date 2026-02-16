@@ -1,0 +1,15 @@
+# Build folder
+build/
+
+# Executables
+*.exe
+*.out
+
+# Database file
+data.db
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
