@@ -191,10 +191,3 @@ fastkvs/
 ## Author
 
 **Sreekaree**
-7+ years experience in:
-
-* Linux
-* C++
-* Multithreaded Systems
-
-```
