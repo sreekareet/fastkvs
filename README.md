@@ -26,9 +26,7 @@ A production-style **in-memory key-value store** implemented in C++17 with:
 ---
 
 ## Architecture
-
 ```
-
 ```
         +-------------------+
         |      Client       |
@@ -46,8 +44,6 @@ A production-style **in-memory key-value store** implemented in C++17 with:
   +---------------+---------------+
   |                               |
   v                               v
-```
-
 +-------------+               +----------------+
 | LRU Manager |               |  Persistence   |
 | (Eviction)  |               |  (File I/O)    |
@@ -66,8 +62,6 @@ v
 - `LRUCache` tracks usage to evict least recently used items when capacity is exceeded.
 - `ThreadPool` manages multiple worker threads to avoid creating/destroying threads per request.
 - `Persistence` allows saving and loading `KVStore` to a file.
-
----
 
 ## Concurrency Design
 
