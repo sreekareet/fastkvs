@@ -27,7 +27,6 @@ A production-style **in-memory key-value store** implemented in C++17 with:
 
 ## Architecture
 ```
-```
         +-------------------+
         |      Client       |
         +---------+---------+
@@ -54,7 +53,7 @@ v
 |    Thread Pool    |
 +-------------------+
 
-````
+```
 
 **Notes:**
 
