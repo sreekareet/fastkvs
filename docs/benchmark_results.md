@@ -1,6 +1,7 @@
-FastKVS Benchmark Results
+## FastKVS Benchmark Results
 
 Date: 2026-02-20
+
 KVStore Capacity: 200,000 keys
 
 # Single Thread Benchmark
@@ -12,8 +13,8 @@ KVStore Capacity: 200,000 keys
 
 Notes:
 
-PUT throughput is lower than GET due to write and LRU updates.
-GET throughput is higher because reads are relatively cheaper, even though LRU reordering occurs.
+- PUT throughput is lower than GET due to write and LRU updates.
+- GET throughput is higher because reads are relatively cheaper, even though LRU reordering occurs.
 
 # Multi-Thread PUT Benchmark
 
@@ -26,8 +27,8 @@ GET throughput is higher because reads are relatively cheaper, even though LRU r
 
 Notes:
 
-Throughput decreases at higher threads due to mutex contention in KVStore.
-LRU eviction overhead adds slightly to each PUT.
+- Throughput decreases at higher threads due to mutex contention in KVStore.
+- LRU eviction overhead adds slightly to each PUT.
 
 # Mixed Workload (80% GET / 20% PUT)
 
@@ -40,9 +41,9 @@ LRU eviction overhead adds slightly to each PUT.
 
 Notes:
 
-Mixed workloads reflect realistic usage scenarios.
-GET operations dominate, which helps throughput stay higher than pure PUT with multiple threads.
-Shows impact of thread contention vs. read/write mix.
+- Mixed workloads reflect realistic usage scenarios.
+- GET operations dominate, which helps throughput stay higher than pure PUT with multiple threads.
+- Shows impact of thread contention vs. read/write mix.
 
 # Observations & Analysis
 
@@ -59,6 +60,4 @@ Shows impact of thread contention vs. read/write mix.
 
 Throughput calculation:
 
-Throughput (ops/sec) = Total Operations × 1000
-                        _______________________
-                            Time (ms)
+Throughput (ops/sec) = (Total Operations × 1000) / Time (ms)
