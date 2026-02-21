@@ -11,27 +11,21 @@ add_executable(fastkv
     src/persistence.cpp
 )
 
-add_executable(lru_test
+add_executable(test
     test/lru_evict_test.cpp
     src/kvstore.cpp
     src/thread_pool.cpp
     src/lru_cache.cpp
     src/persistence.cpp
 )
-add_executable(benchmark_single
-     test/benchmark_single.cpp
+
+add_executable(benchmark
+     benchmarks/benchmark_kvstore.cpp
      src/kvstore.cpp
      src/thread_pool.cpp
      src/lru_cache.cpp
      src/persistence.cpp
  )
-add_executable(benchmark_multi
-      test/benchmark_multi.cpp
-      src/kvstore.cpp
-      src/thread_pool.cpp
-      src/lru_cache.cpp
-      src/persistence.cpp
-  )
 
 target_compile_options(fastkv PRIVATE -Wall -Wextra -Wpedantic)
 

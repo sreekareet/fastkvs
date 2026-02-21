@@ -1,66 +1,168 @@
-FastKVS:
+FASTKVS
 
-FastKVS is a simple multithreaded in-memory key-value store written in C++17.
+# High Performance Thread-Safe Key-Value Store (C++)
 
-This project demonstrates LRU cache eviction, custom thread pool implementation, and basic persistence.
+A production-style in memory key-value store implemented in C++17 with:
 
-Features:
+- Thread safety using std::shared_mutex
+- LRU eviction policy
+- File persistence
+- Thread pool execution
+- Benchmarking & scaling analysis
+- Unit testing support
+- Clean CMake build system
 
-> In-memory key-value storage
+---
 
-> LRU (Least Recently Used) eviction policy
+# Features
 
-> Custom ThreadPool using std::thread
+- O(1) average PUT/GET
+- LRU eviction
+- Concurrent multi-threaded access
+- Persistence to disk
+- Benchmarking (single-thread & multi-thread)
+- Performance scaling analysis
 
-> Mutex and condition variable for synchronization
+---
 
-> Basic file persistence
+# Architecture
 
-> Single thread and multi thread benchmarks
+                +-------------------+
+                |      Client       |
+                +---------+---------+
+                          |
+                          v
+                +-------------------+
+                |     KVStore       |
+                |-------------------|
+                | - unordered_map   |
+                | - LRU list        |
+                | - shared_mutex    |
+                +---------+---------+
+                          |
+          +---------------+---------------+
+          |                               |
+          v                               v
+   +-------------+               +----------------+
+   | LRU Manager |               |  Persistence   |
+   | (Eviction)  |               |  (File I/O)    |
+   +-------------+               +----------------+
+                          |
+                          v
+                +-------------------+
+                |    Thread Pool    |
+                +-------------------+
 
-> Built using CMake
+Notes:
 
-Project Structure:
+- KVStore is the main interface; all client operations (put, get, remove) go through it.
+- LRUCache tracks usage to evict least recently used items when capacity is exceeded.
+- ThreadPool manages multiple worker threads to avoid creating/destroying threads per request.
+- Persistence allows saving and loading KVStore to a file.
+
+---
+
+# Concurrency Design
+
+- `std::shared_mutex` used for synchronization
+- `put()` → exclusive lock
+- `get()` → exclusive lock (due to LRU reordering)
+- ThreadPool handles concurrent task execution
+
+---
+
+# Build Instructions (CMake)
+
+mkdir build
+cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make
+
+This compiles all source files with -O2 optimization.
+
+Using g++ (manual):
+g++ -std=c++17 src/*.cpp -pthread -O2 -o fastkvs
+
+# Run KVStore example
+./fastkvs
+
+# Run Tests
+./test
+
+# Run Benchmark
+./benchmark
+
+---
+
+# Benchmark Results
+
+Full benchmark results are available in [docs/benchmark_results.md](docs/benchmark_results.md)
+
+---
+
+# Unit Testing
+
+Covers:
+
+- put()
+- get()
+- remove()
+- eviction behavior
+
+---
+
+# Future Improvements
+
+- Lock striping to reduce contention
+- True shared reads without LRU modification
+- Background eviction thread
+- Metrics instrumentation
+- Latency percentile tracking
+- Sharded architecture
+
+---
+
+# Project Structure
 
 fastkvs/
 │
-├── src/        # Core source files
-├── test/       # Benchmark and test files
-├── CMakeLists.txt
 ├── README.md
-└── .gitignore
+├── CMakeLists.txt
+├── docs/
+│   ├── architecture.md
+│   └── design.md
+|   ├── benchmark_results.md
+├── src/
+│   ├── main.cpp             # Entry point
+│   ├── kvstore.h            # KVStore class declaration
+│   ├── kvstore.cpp          # KVStore class implementation
+│   ├── lru_cache.h          # LRUCache class declaration
+│   ├── lru_cache.cpp        # LRUCache class implementation
+│   ├── thread_pool.h        # ThreadPool class declaration
+│   ├── thread_pool.cpp      # ThreadPool class implementation
+│   ├── persistence.h        # Persistence class declaration
+│   └── persistence.cpp      # Persistence class implementation
+├── benchmarks/
+│   └── benchmark_kvstore.cpp
+└── test/
+    ├── lru_evict_test.cpp
 
-Build Instructions:
 
-Step 1: Create build folder
-mkdir build
-cd build
+---
 
-Step 2: Run CMake in Release mode
-cmake -DCMAKE_BUILD_TYPE=Release ..
+# Limitations
 
-Step 3: Compile
-make
+- Global shared_mutex limits high-core scalability
+- get() requires exclusive lock due to LRU update
+- Persistence is synchronous
 
-Run Benchmarks:
+---
 
-After building:
-
-./benchmark_single
-./benchmark_multi
-
-Technologies Used:
-
-C++17
-
-STL (unordered_map, list, thread, mutex, condition_variable)
-
-CMake
-
-Git
-
-Author:
+# Author
 
 Sreekaree
+7+ years experience in:
+- Linux
+- C++
+- Multithreaded Systems
 
-GitHub: https://github.com/sreekareet/fastkvs
