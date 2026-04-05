@@ -33,10 +33,10 @@ int main() {
     for (int i = 0; i < num_ops; ++i) {
         pool.enqueue([&, i]() {
             std::string value;
-            if (store.get("key" + std::to_string(i), value)) {
+            if (auto value = store.get("key" + std::to_string(i))) {
                 // For demo only; logging may be used
                 std::lock_guard<std::mutex> lock(cout_mutex);
-                std::cout << "Got: " << value << "\n";
+                std::cout << "Got: " << *value << "\n";
             }
         });
     }

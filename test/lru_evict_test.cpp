@@ -15,22 +15,21 @@ int main() {
     std::string value;
 
     // Both should exist
-    assert(store.get("A", value));
-    assert(value == "ValueA");
+    assert(store.get("A").has_value());
+    assert(store.get("A").value() == "ValueA");
 
-    assert(store.get("B", value));
-    assert(value == "ValueB");
+    assert(store.get("B").has_value());
+    assert(store.get("B").value() == "ValueB");
 
     // Add third key -> should evict LRU ("A")
     store.put("C", "ValueC");
 
     // "A" should be evicted
-    bool existsA = store.get("A", value);
-    assert(!existsA);  // A should not exist anymore
+    assert(!store.get("A").has_value());
 
     // "B" and "C" should still exist
-    assert(store.get("B", value) && value == "ValueB");
-    assert(store.get("C", value) && value == "ValueC");
+    assert(store.get("B").has_value() && store.get("B").value() == "ValueB");
+    assert(store.get("C").has_value() && store.get("C").value() == "ValueC");
 
     // Remove "B"
     store.remove("B");

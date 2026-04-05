@@ -3,6 +3,7 @@
 #define LRU_CACHE_H
 
 #include <string>
+#include <optional>
 #include <unordered_map>
 #include <list>
 
@@ -10,7 +11,7 @@ class LRUCache{
     public:
         LRUCache(size_t capacity);
         void touch(const std::string &key);
-        std::string evict();
+        [[nodiscard]] std::optional<std::string> evict();
         void remove(const std::string &key);
 
     private:

@@ -13,10 +13,12 @@ void LRUCache:: touch(const std::string &key){
     cacheMap[key] = lst.begin();
 }
 
-std::string LRUCache :: evict(){
+// When capacity is exceeded, remove the least recently used key.
+// The back of the list represents the LRU entry.
+std::optional<std::string> LRUCache :: evict(){
         
     if (lst.empty())
-        return "";
+        return std::nullopt;
 
     std::string key = lst.back();
     lst.pop_back();

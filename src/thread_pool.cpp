@@ -8,6 +8,9 @@ ThreadPool::ThreadPool(size_t num_threads)
     }
 }
 
+// Worker thread continuously waits for tasks.
+// Uses condition_variable to avoid busy-waiting.
+// Gracefully exits when stopflag is set and queue is empty.
 void ThreadPool::worker() {
     while (true) {
         std::function<void()> task;
@@ -30,12 +33,14 @@ void ThreadPool::worker() {
     }
 }
 
+// Adds a task to the queue.
+// Throws if ThreadPool is stopped to prevent undefined behavior.
 void ThreadPool::enqueue(std::function<void()> task) {
-{
-    if (stopflag) 
-        throw std::runtime_error("enqueue on stopped ThreadPool");
-    std::unique_lock<std::mutex> lock(w_mutex);
-    qtasks.push(std::move(task));
+    {
+        if (stopflag) 
+            throw std::runtime_error("enqueue on stopped ThreadPool");
+        std::unique_lock<std::mutex> lock(w_mutex);
+        qtasks.push(std::move(task));
     }
 
     condition.notify_one();

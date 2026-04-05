@@ -3,6 +3,8 @@
 
 #include <unordered_map>
 #include <string>
+#include <string_view>
+#include <optional>
 #include <vector>
 #include <shared_mutex>
 #include "lru_cache.h"
@@ -19,8 +21,8 @@ class KVStore{
     public:
         KVStore(size_t capacity);
         void put(const std::string &key, const std::string &value);
-        bool get(const std::string &key,  std::string &value) const;
-        void remove(const std::string&key);
+        [[nodiscard]] std::optional<std::string> get(std::string_view key) const;
+        void remove(const std::string &key);
         std::vector<std::string> get_all_keys() const;
 
     private:

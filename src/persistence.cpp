@@ -5,6 +5,10 @@
 Persistence::Persistence(const std::string& filename)
     : pfilename(filename) {}
 
+// Snapshot-based persistence.
+// Rewrites full store to disk.
+// Not crash-consistent but simple and predictable.
+
 // Save KVStore to file
 void Persistence::save(const KVStore& store) {
     std::ofstream out(pfilename, std::ios::trunc);
@@ -15,23 +19,18 @@ void Persistence::save(const KVStore& store) {
 
     std::string value;
     for (const auto& key : store.get_all_keys()) {
-        if (store.get(key, value)) {
-            out << key << " " << value << "\n";
+        if (auto value = store.get(key)) {
+            out << key << " " << *value << "\n";
         }
     }
-
-    out.close();
 }
 
 // Load KVStore from file
 void Persistence::load(KVStore& store) {
+    if (!std::filesystem::exists(pfilename)) return;
     std::ifstream in(pfilename);
-    if (!in.is_open()) return; // No previous data
-
     std::string key, value;
     while (in >> key >> value) {
         store.put(key, value);
     }
-
-    in.close();
 }

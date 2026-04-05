@@ -60,7 +60,7 @@ void benchmark_single_thread() {
     auto start_get = Clock::now();
 
     for (int i = 0; i < NUM_OPS; ++i) {
-        store.get("key" + std::to_string(i), value);
+        auto value = store.get("key" + std::to_string(i));
     }
 
     auto end_get = Clock::now();
@@ -144,7 +144,7 @@ void benchmark_mixed_workload(int threads) {
                 store.put("key" + std::to_string(i),
                           "newvalue" + std::to_string(i));
             } else {          // 80% GET
-                store.get("key" + std::to_string(i), value);
+                auto value = store.get("key" + std::to_string(i));
             }
 
             completed.fetch_add(1, std::memory_order_relaxed);
