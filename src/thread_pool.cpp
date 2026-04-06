@@ -47,11 +47,7 @@ void ThreadPool::enqueue(std::function<void()> task) {
 }
 
 ThreadPool::~ThreadPool() {
-    {
-        std::unique_lock<std::mutex> lock(w_mutex);
-        stopflag = true;
-    }
-
+    stopflag = true; //atomic write, no lock needed
     condition.notify_all();
 
     for (auto& thread : vworkers) {
