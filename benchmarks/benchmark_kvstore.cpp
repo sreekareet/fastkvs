@@ -7,10 +7,10 @@
 #include <vector>
 #include <thread>
 
-using Clock = std::chrono::high_resolution_clock;
+using Clock = std::chrono::high_resolution_clock; //like typedef--alias
 
-static const int NUM_OPS = 200000;
-static const int WARMUP_OPS = 10000;
+constexpr int NUM_OPS = 200000;
+constexpr int WARMUP_OPS = 10000;
 
 /* ---------------------------------------------------------
    Utility: Print Throughput Safely
@@ -55,8 +55,6 @@ void benchmark_single_thread() {
     auto end_put = Clock::now();
 
     // GET benchmark
-    std::string value;
-
     auto start_get = Clock::now();
 
     for (int i = 0; i < NUM_OPS; ++i) {
@@ -138,7 +136,6 @@ void benchmark_mixed_workload(int threads) {
 
     for (int i = 0; i < NUM_OPS; ++i) {
         pool.enqueue([&store, &completed, i]() {
-            std::string value;
 
             if (i % 5 == 0) {  // 20% PUT
                 store.put("key" + std::to_string(i),

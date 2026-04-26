@@ -1,153 +1,100 @@
-# FASTKVS
+# FastKVS
 
-## High Performance Thread-Safe Key-Value Store (C++)
+A high-performance, thread-safe, networked key-value store written in C++17.  
+Clients connect over TCP and issue `SET`, `GET`, and `DEL` commands against an in-memory store with LRU eviction and file persistence.
 
-A production-style **in-memory key-value store** implemented in C++17 with:
+---
 
-- Thread safety using `std::shared_mutex`
-- LRU eviction policy
-- File persistence
-- Thread pool execution
-- Benchmarking & scaling analysis
-- Unit testing support
-- Clean CMake build system
+## Architecture
+
+```
+  Client (TCP)         Client (TCP)         Client (TCP)
+       |                    |                    |
+       +--------------------+--------------------+
+                            |
+                     [ TCP Server ]
+                     port 7379
+                     one thread per client
+                            |
+                     [ KVStore ]
+                     std::shared_mutex
+                     unordered_map + LRU list
+                      /              \
+               [ LRU Cache ]    [ Persistence ]
+               O(1) eviction    snapshot to disk
+                      \
+               [ Thread Pool ]
+               worker threads
+```
 
 ---
 
 ## Features
 
-- O(1) average PUT/GET
-- LRU eviction
-- Concurrent multi-threaded access
-- Persistence to disk
-- Benchmarking (single-thread & multi-thread)
-- Performance scaling analysis
+- **TCP socket server** — clients connect over the network, not just in-process
+- **Concurrent client handling** — each client gets its own thread
+- **Thread-safe KVStore** — `std::shared_mutex` protects all operations
+- **O(1) GET/SET/DEL** — backed by `std::unordered_map`
+- **LRU eviction** — bounded memory, least recently used keys evicted first
+- **File persistence** — data saved to disk on shutdown, loaded on startup
+- **Graceful shutdown** — handles `SIGINT`/`SIGTERM`, no data loss on Ctrl+C or kill
 
 ---
 
-## Architecture
-```
-        +-------------------+
-        |      Client       |
-        +---------+---------+
-                  |
-                  v
-        +-------------------+
-        |     KVStore       |
-        |-------------------|
-        | - unordered_map   |
-        | - LRU list        |
-        | - shared_mutex    |
-        +---------+---------+
-                  |
-  +---------------+---------------+
-  |                               |
-  v                               v
-+-------------+               +----------------+
-| LRU Manager |               |  Persistence   |
-| (Eviction)  |               |  (File I/O)    |
-+-------------+               +----------------+
-|
-v
-+-------------------+
-|    Thread Pool    |
-+-------------------+
+## Commands
 
-```
-
-**Notes:**
-
-- `KVStore` is the main interface; all client operations (`put`, `get`, `remove`) go through it.
-- `LRUCache` tracks usage to evict least recently used items when capacity is exceeded.
-- `ThreadPool` manages multiple worker threads to avoid creating/destroying threads per request.
-- `Persistence` allows saving and loading `KVStore` to a file.
-
-## Concurrency Design
-
-- `std::shared_mutex` used for synchronization
-- `put()` → exclusive lock
-- `get()` → exclusive lock (due to LRU reordering)
-- `ThreadPool` handles concurrent task execution
+| Command | Example | Response |
+|---|---|---|
+| `SET key value` | `SET name sreekar` | `OK` |
+| `GET key` | `GET name` | `sreekar` or `NULL` |
+| `DEL key` | `DEL name` | `OK` |
 
 ---
 
-## Build Instructions (CMake)
+## Build
+
+Requires: `g++` with C++17, CMake 3.10+, POSIX system (Linux / Cygwin)
 
 ```bash
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake ..
 make
-````
-
-This compiles all source files with `-O2` optimization.
-
-**Using g++ directly:**
-
-```bash
-g++ -std=c++17 src/*.cpp -pthread -O2 -o fastkvs
 ```
 
+This builds five binaries: `server`, `client`, `fastkv`, `test`, `benchmark`
+
 ---
 
-## Run KVStore Example
+## Run
 
+**Start the server:**
 ```bash
-./fastkvs
+./build/server
 ```
 
----
-
-## Run Tests
-
+**Connect a client:**
 ```bash
-./test
+./build/client
 ```
 
----
-
-## Run Benchmark
-
-```bash
-./benchmark
+**Shut down cleanly** (data is saved to `fastkvs_data.txt`):
+```
+Ctrl+C
 ```
 
----
-
-## Benchmark Results
-
-Full benchmark results are available in [docs/benchmark_results.md](docs/benchmark_results.md)
-
-**Example output (single-thread & multi-thread):**
-
-| Scenario                               | Threads | Time (ms) | Throughput (ops/sec) |
-| -------------------------------------- | ------- | --------- | -------------------- |
-| Single-thread PUT                      | 1       | 314       | 636,943              |
-| Single-thread GET                      | 1       | 146       | 1,369,860            |
-| Multi-thread PUT                       | 4       | 2,118     | 94,428.7             |
-| Multi-thread Mixed (80% GET / 20% PUT) | 4       | 1,494     | 133,869              |
+**On next startup**, data is automatically reloaded from disk.
 
 ---
 
-## Unit Testing
+## Benchmarks
 
-Covers:
-
-* `put()`
-* `get()`
-* `remove()`
-* Eviction behavior (LRU)
-
----
-
-## Future Improvements
-
-* Lock striping to reduce contention
-* True shared reads without LRU modification
-* Background eviction thread
-* Metrics instrumentation
-* Latency percentile tracking
-* Sharded architecture
+| Scenario | Threads | Throughput |
+|---|---|---|
+| Single-thread GET | 1 | 1,369,860 ops/sec |
+| Single-thread PUT | 1 | 636,943 ops/sec |
+| Multi-thread PUT | 4 | 94,428 ops/sec |
+| Multi-thread Mixed (80% GET / 20% PUT) | 4 | 133,869 ops/sec |
 
 ---
 
@@ -155,39 +102,40 @@ Covers:
 
 ```
 fastkvs/
-│
-├── README.md
-├── CMakeLists.txt
-├── docs/
-│   ├── architecture.md
-│   ├── design.md
-│   └── benchmark_results.md
+├── server.cpp              # TCP server — accepts clients, parses commands
+├── client.cpp              # TCP client — connects and sends commands
 ├── src/
-│   ├── main.cpp
-│   ├── kvstore.h
-│   ├── kvstore.cpp
-│   ├── lru_cache.h
-│   ├── lru_cache.cpp
-│   ├── thread_pool.h
-│   ├── thread_pool.cpp
-│   ├── persistence.h
-│   └── persistence.cpp
+│   ├── kvstore.h/cpp       # Core key-value store
+│   ├── lru_cache.h/cpp     # LRU eviction logic
+│   ├── thread_pool.h/cpp   # Worker thread pool
+│   ├── persistence.h/cpp   # Save/load to disk
+│   └── main.cpp            # Standalone in-process demo
 ├── benchmarks/
 │   └── benchmark_kvstore.cpp
-└── test/
-    └── lru_evict_test.cpp
+├── test/
+│   └── lru_evict_test.cpp
+├── docs/
+│   └── benchmark_results.md
+└── CMakeLists.txt
 ```
 
 ---
 
-## Limitations
+## Concurrency Design
 
-* Global `shared_mutex` limits high-core scalability
-* `get()` requires exclusive lock due to LRU update
-* Persistence is synchronous
+- `std::shared_mutex` — single coarse-grained lock per KVStore instance
+- `put()` and `remove()` → exclusive lock
+- `get()` → exclusive lock (LRU reordering requires write access)
+- Server spawns one `std::thread` per client connection — all threads share one KVStore instance safely
+- `std::atomic<bool>` flag used for clean shutdown signaling across threads
 
 ---
 
-## Author
+## Future Improvements
 
-**Sreekaree**
+- Lock striping to reduce mutex contention at scale
+- True shared reads without LRU modification cost
+- Async background persistence instead of snapshot on shutdown
+- Metrics — hit rate, miss rate, latency percentiles
+- Sharded architecture across multiple KVStore instances
+- RESP protocol compatibility (Redis-compatible clients)

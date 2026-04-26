@@ -33,7 +33,7 @@ int main() {
 
     // Remove "B"
     store.remove("B");
-    assert(!store.get("B", value));
+    assert(!store.get("B").has_value());
 
     std::cout << "KVStore test passed successfully!\n";
     return 0;
