@@ -37,9 +37,9 @@ void ThreadPool::worker() {
 // Throws if ThreadPool is stopped to prevent undefined behavior.
 void ThreadPool::enqueue(std::function<void()> task) {
     {
+        std::unique_lock<std::mutex> lock(w_mutex);
         if (stopflag) 
             throw std::runtime_error("enqueue on stopped ThreadPool");
-        std::unique_lock<std::mutex> lock(w_mutex);
         qtasks.push(std::move(task));
     }
 
