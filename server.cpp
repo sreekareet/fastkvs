@@ -1,12 +1,12 @@
-// server.cpp - Multi-threaded TCP server with graceful shutdown
+// server.cpp - Multi-threaded TCP server with metrics
 
 #include <iostream>
 #include <string>
 #include <sstream>
 #include <vector>
 #include <thread>
-#include <atomic>   // for std::atomic<bool>
-#include <csignal>  // for signal(), SIGINT, SIGTERM
+#include <atomic>
+#include <csignal>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -17,41 +17,35 @@
 #include "src/persistence.h"
 
 // -------------------------------------------------------
-// GLOBAL FLAG: is the server shutting down?
+// METRICS — atomic counters, one per stat
 // -------------------------------------------------------
-// std::atomic<bool> is thread-safe — multiple threads can
-// read it at the same time without a mutex.
-// When this flips to false, threads stop accepting/reading.
-
-std::atomic<bool> running(true);
-
-// -------------------------------------------------------
-// GLOBAL: server socket fd
-// -------------------------------------------------------
-// We need this in the signal handler so we can close it,
-// which causes accept() to unblock and the loop to exit.
-
-int server_fd = -1;
-
-// -------------------------------------------------------
-// SIGNAL HANDLER: called when Ctrl+C or kill is received
-// -------------------------------------------------------
-// SIGINT  = Ctrl+C
-// SIGTERM = kill command (what systemd/docker sends on shutdown)
+// std::atomic means multiple threads can increment these
+// simultaneously without a mutex — the CPU guarantees
+// the increment is one indivisible operation.
 //
-// We just flip the flag and close the server socket.
-// The main loop will notice and exit cleanly.
+// If we used a regular int, two threads incrementing at
+// the same time could corrupt the value (race condition).
+
+std::atomic<uint64_t> total_commands(0);  // every SET/GET/DEL
+std::atomic<uint64_t> total_hits(0);      // GET found the key
+std::atomic<uint64_t> total_misses(0);    // GET did not find the key
+std::atomic<uint64_t> total_sets(0);      // SET commands
+std::atomic<uint64_t> total_deletes(0);   // DEL commands
+
+// -------------------------------------------------------
+// GLOBAL FLAG + SERVER FD (for graceful shutdown)
+// -------------------------------------------------------
+std::atomic<bool> running(true);
+int server_fd = -1;
 
 void handle_signal(int signal) {
     std::cout << "\nShutdown signal received (" << signal << "). Shutting down...\n";
     running = false;
-    if (server_fd != -1) {
-        close(server_fd); // this unblocks accept() in the main loop
-    }
+    if (server_fd != -1) close(server_fd);
 }
 
 // -------------------------------------------------------
-// HELPER: Split "SET name sreekar" into ["SET","name","sreekar"]
+// HELPER: Split "SET name sreekar" → ["SET","name","sreekar"]
 // -------------------------------------------------------
 std::vector<std::string> split(const std::string& s) {
     std::vector<std::string> tokens;
@@ -62,30 +56,71 @@ std::vector<std::string> split(const std::string& s) {
 }
 
 // -------------------------------------------------------
-// HELPER: Parse command and call the right KVStore method
+// HELPER: Build STATS response string
+// -------------------------------------------------------
+// Called when client sends "STATS"
+// Reads all atomic counters and formats them into a string
+
+std::string get_stats() {
+    uint64_t hits   = total_hits.load();
+    uint64_t misses = total_misses.load();
+    uint64_t total  = hits + misses;
+
+    // Calculate hit rate — avoid division by zero
+    double hit_rate = (total > 0) ? (100.0 * hits / total) : 0.0;
+
+    std::ostringstream oss;
+    oss << "total_commands : " << total_commands.load() << "\n"
+        << "total_sets     : " << total_sets.load()     << "\n"
+        << "total_deletes  : " << total_deletes.load()  << "\n"
+        << "get_hits       : " << hits                  << "\n"
+        << "get_misses     : " << misses                << "\n"
+        << "hit_rate       : " << hit_rate              << "%\n";
+    return oss.str();
+}
+
+// -------------------------------------------------------
+// HELPER: Parse command, update metrics, call KVStore
 // -------------------------------------------------------
 std::string handle_command(const std::string& raw, KVStore& store) {
     auto parts = split(raw);
-
     if (parts.empty()) return "ERROR: empty command\n";
 
     const std::string& cmd = parts[0];
 
+    // Every valid command increments total_commands
+    // ++ on an atomic is thread-safe — no mutex needed
+
     if (cmd == "SET") {
         if (parts.size() < 3) return "ERROR: SET requires key and value\n";
         store.put(parts[1], parts[2]);
+        total_commands++;
+        total_sets++;
         return "OK\n";
 
     } else if (cmd == "GET") {
         if (parts.size() < 2) return "ERROR: GET requires key\n";
         auto result = store.get(parts[1]);
-        if (result.has_value()) return result.value() + "\n";
-        else                    return "NULL\n";
+        total_commands++;
+        if (result.has_value()) {
+            total_hits++;           // key was found — hit
+            return result.value() + "\n";
+        } else {
+            total_misses++;         // key not found — miss
+            return "NULL\n";
+        }
 
     } else if (cmd == "DEL") {
         if (parts.size() < 2) return "ERROR: DEL requires key\n";
         store.remove(parts[1]);
+        total_commands++;
+        total_deletes++;
         return "OK\n";
+
+    } else if (cmd == "STATS") {
+        // STATS doesn't count as a command in the metrics
+        // — it's a read of the metrics themselves
+        return get_stats();
 
     } else {
         return "ERROR: unknown command '" + cmd + "'\n";
@@ -98,7 +133,7 @@ std::string handle_command(const std::string& raw, KVStore& store) {
 void handle_client(int client_fd, KVStore& store) {
     char buffer[1024];
 
-    while (running) {  // ← check the flag on every iteration
+    while (running) {
         memset(buffer, 0, sizeof(buffer));
         int bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
 
@@ -116,32 +151,19 @@ void handle_client(int client_fd, KVStore& store) {
 }
 
 int main() {
-
-    // -------------------------------------------------------
-    // Register signal handlers BEFORE doing anything else
-    // -------------------------------------------------------
-    // Now Ctrl+C and kill both call handle_signal()
-    // instead of instantly killing the process
-
     signal(SIGINT,  handle_signal);
     signal(SIGTERM, handle_signal);
 
-    // Create shared KVStore and Persistence
     KVStore store(100);
     Persistence persistence("fastkvs_data.txt");
 
-    // Load previously saved data on startup if file exists
     if (persistence.exists()) {
         persistence.load(store);
         std::cout << "Data loaded from disk.\n";
     }
 
-    // Create socket
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd == -1) {
-        std::cerr << "Failed to create socket\n";
-        return 1;
-    }
+    if (server_fd == -1) { std::cerr << "Failed to create socket\n"; return 1; }
     std::cout << "Socket created\n";
 
     int opt = 1;
@@ -154,27 +176,22 @@ int main() {
     address.sin_port        = htons(7379);
 
     if (bind(server_fd, (sockaddr*)&address, sizeof(address)) == -1) {
-        std::cerr << "Bind failed\n";
-        return 1;
+        std::cerr << "Bind failed\n"; return 1;
     }
     std::cout << "Bound to port 7379\n";
 
     if (listen(server_fd, 5) == -1) {
-        std::cerr << "Listen failed\n";
-        return 1;
+        std::cerr << "Listen failed\n"; return 1;
     }
     std::cout << "Listening on port 7379...\n";
     std::cout << "Server ready. Waiting for clients...\n";
 
-    // Accept loop
     while (running) {
         sockaddr_in client_address;
         socklen_t client_len = sizeof(client_address);
 
         int client_fd = accept(server_fd, (sockaddr*)&client_address, &client_len);
-
         if (client_fd == -1) {
-            // If we're shutting down, accept() fails — that's expected
             if (!running) break;
             std::cerr << "Accept failed, continuing...\n";
             continue;
@@ -184,9 +201,7 @@ int main() {
         std::thread(handle_client, client_fd, std::ref(store)).detach();
     }
 
-    // -------------------------------------------------------
-    // GRACEFUL SHUTDOWN — we only reach here after Ctrl+C
-    // -------------------------------------------------------
+    // Graceful shutdown
     std::cout << "Saving data to disk...\n";
     persistence.save(store);
     std::cout << "Data saved. Goodbye.\n";

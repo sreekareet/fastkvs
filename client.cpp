@@ -61,7 +61,10 @@ int main() {
     std::string commands[] = {
         "SET name sreekar\n",
         "SET city toronto\n",
-        "GET name\n"
+        "GET name\n",
+        "GET unknown\n",   // this will be a miss
+        "DEL city\n",
+        "STATS\n"          // fetch metrics at the end
     };
 
     char buffer[1024];
