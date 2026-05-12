@@ -1,7 +1,7 @@
 # FastKVS
 
 A high-performance, thread-safe, networked key-value store written in C++17.  
-Clients connect over TCP and issue `SET`, `GET`, and `DEL` commands against an in-memory store with LRU eviction and file persistence.
+Clients connect over TCP and issue `SET`, `GET`, `DEL`, and `STATS` commands against an in-memory store with LRU eviction and file persistence.
 
 ---
 
@@ -15,6 +15,7 @@ Clients connect over TCP and issue `SET`, `GET`, and `DEL` commands against an i
                      [ TCP Server ]
                      port 7379
                      one thread per client
+                     atomic metrics counters
                             |
                      [ KVStore ]
                      std::shared_mutex
@@ -36,6 +37,7 @@ Clients connect over TCP and issue `SET`, `GET`, and `DEL` commands against an i
 - **Thread-safe KVStore** — `std::shared_mutex` protects all operations
 - **O(1) GET/SET/DEL** — backed by `std::unordered_map`
 - **LRU eviction** — bounded memory, least recently used keys evicted first
+- **Real-time metrics** — hit rate, miss rate, command counts via `STATS` command
 - **File persistence** — data saved to disk on shutdown, loaded on startup
 - **Graceful shutdown** — handles `SIGINT`/`SIGTERM`, no data loss on Ctrl+C or kill
 
@@ -48,6 +50,17 @@ Clients connect over TCP and issue `SET`, `GET`, and `DEL` commands against an i
 | `SET key value` | `SET name sreekar` | `OK` |
 | `GET key` | `GET name` | `sreekar` or `NULL` |
 | `DEL key` | `DEL name` | `OK` |
+| `STATS` | `STATS` | hit rate, miss rate, command counts |
+
+### Example STATS output
+```
+total_commands : 5
+total_sets     : 2
+total_deletes  : 1
+get_hits       : 1
+get_misses     : 1
+hit_rate       : 50%
+```
 
 ---
 
@@ -83,7 +96,7 @@ This builds five binaries: `server`, `client`, `fastkv`, `test`, `benchmark`
 Ctrl+C
 ```
 
-**On next startup**, data is automatically reloaded from disk.
+On next startup, data is automatically reloaded from disk.
 
 ---
 
@@ -102,7 +115,7 @@ Ctrl+C
 
 ```
 fastkvs/
-├── server.cpp              # TCP server — accepts clients, parses commands
+├── server.cpp              # TCP server — accepts clients, parses commands, tracks metrics
 ├── client.cpp              # TCP client — connects and sends commands
 ├── src/
 │   ├── kvstore.h/cpp       # Core key-value store
@@ -127,15 +140,13 @@ fastkvs/
 - `put()` and `remove()` → exclusive lock
 - `get()` → exclusive lock (LRU reordering requires write access)
 - Server spawns one `std::thread` per client connection — all threads share one KVStore instance safely
-- `std::atomic<bool>` flag used for clean shutdown signaling across threads
+- `std::atomic<bool>` flag for clean shutdown signaling across threads
+- `std::atomic<uint64_t>` counters for metrics — thread-safe increments with no mutex overhead
 
 ---
 
 ## Future Improvements
 
-- Lock striping to reduce mutex contention at scale
-- True shared reads without LRU modification cost
-- Async background persistence instead of snapshot on shutdown
-- Metrics — hit rate, miss rate, latency percentiles
-- Sharded architecture across multiple KVStore instances
-- RESP protocol compatibility (Redis-compatible clients)
+- **Lock striping** — partition KVStore into N shards each with its own mutex, reducing contention under high concurrency
+- **Sharded architecture** — multiple KVStore instances across threads for horizontal scalability
+- **Async background persistence** — write to disk on a background thread instead of blocking on shutdown
