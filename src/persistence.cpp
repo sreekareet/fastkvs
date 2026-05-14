@@ -17,7 +17,6 @@ void Persistence::save(const KVStore& store) {
         return;
     }
 
-    std::string value;
     for (const auto& key : store.get_all_keys()) {
         if (auto value = store.get(key)) {
             out << key << " " << *value << "\n";
@@ -29,6 +28,10 @@ void Persistence::save(const KVStore& store) {
 void Persistence::load(KVStore& store) {
     if (!std::filesystem::exists(pfilename)) return;
     std::ifstream in(pfilename);
+    if(!in.is_open()) {
+        std::cerr << "Failed to open file for loading: \n";
+        return;
+    }
     std::string key, value;
     while (in >> key >> value) {
         store.put(key, value);

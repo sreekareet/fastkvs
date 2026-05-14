@@ -41,7 +41,6 @@ int server_fd = -1;
 void handle_signal(int signal) {
     std::cout << "\nShutdown signal received (" << signal << "). Shutting down...\n";
     running = false;
-    if (server_fd != -1) close(server_fd);
 }
 
 // -------------------------------------------------------
@@ -144,7 +143,11 @@ void handle_client(int client_fd, KVStore& store) {
 
         std::cout << "Received: " << buffer;
         std::string response = handle_command(std::string(buffer), store);
-        write(client_fd, response.c_str(), response.size());
+        ssize_t written = write(client_fd, response.c_str(), response.size());
+        if (written < 0) {
+            std::cerr << "Write failed: " << strerror(errno) << "\n";
+            break; // exit the read loop, close connection
+        }
     }
 
     close(client_fd);

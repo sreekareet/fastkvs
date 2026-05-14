@@ -36,7 +36,10 @@ int main() {
 
     // inet_pton converts the string "127.0.0.1" into the binary
     // format that the socket API expects
-    inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr);
+    if(inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr) <= 0){
+        std::cerr << "inet_pton failed \n";
+        return 1;
+    }
 
 
     // -------------------------------------------------------
@@ -71,13 +74,24 @@ int main() {
 
     for (const auto& cmd : commands) {
         // Send the command
-        write(sock_fd, cmd.c_str(), cmd.size());
+        ssize_t written = write(sock_fd, cmd.c_str(), cmd.size());
+        if (written < 0) {
+            std::cerr << "Write failed: \n" ;
+            break;
+        }
         std::cout << "Sent: " << cmd;
 
         // Read the response
         memset(buffer, 0, sizeof(buffer));
         int bytes_read = read(sock_fd, buffer, sizeof(buffer) - 1);
         if (bytes_read > 0) {
+            std::cout << "Server said: " << buffer;
+        }
+        else if (bytes_read == 0) {
+            std::cout << "Server closed connection\n";
+            break;
+        } 
+        else {
             std::cout << "Server said: " << buffer;
         }
     }
