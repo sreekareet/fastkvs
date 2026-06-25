@@ -154,6 +154,7 @@ void handle_client(int client_fd, KVStore& store) {
 }
 
 int main() {
+    std::cout.setf(std::ios::unitbuf);
     signal(SIGINT,  handle_signal);
     signal(SIGTERM, handle_signal);
 
@@ -190,6 +191,17 @@ int main() {
     std::cout << "Server ready. Waiting for clients...\n";
 
     while (running) {
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(server_fd, &read_fds);
+
+        struct timeval tv;
+        tv.tv_sec = 2;
+        tv.tv_usec = 0;
+
+        int ready = select(server_fd + 1, &read_fds, nullptr, nullptr, &tv);
+        if (ready <= 0) continue; // timeout or error, check running flag
+                                  //
         sockaddr_in client_address;
         socklen_t client_len = sizeof(client_address);
 

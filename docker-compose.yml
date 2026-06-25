@@ -1,0 +1,11 @@
+services:
+  fastkvs:
+    build: .
+    ports:
+      - "7379:7379"
+    volumes:
+      - kvdata:/app
+    restart: unless-stopped
+
+volumes:
+  kvdata:
