@@ -8,24 +8,24 @@ Clients connect over TCP and issue `SET`, `GET`, `DEL`, and `STATS` commands aga
 ## Architecture
 
 ```
-  Client (TCP)         Client (TCP)         Client (TCP)
-       |                    |                    |
-       +--------------------+--------------------+
-                            |
-                     [ TCP Server ]
-                     port 7379
-                     one thread per client
-                     atomic metrics counters
-                            |
-                     [ KVStore ]
-                     std::shared_mutex
-                     unordered_map + LRU list
-                      /              \
-               [ LRU Cache ]    [ Persistence ]
-               O(1) eviction    snapshot to disk
-                      \
-               [ Thread Pool ]
-               worker threads
+Client (TCP)         Client (TCP)         Client (TCP)
+     |                    |                    |
+     +--------------------+--------------------+
+                          |
+                   [ TCP Server ]
+                   port 7379
+                   one thread per client
+                   atomic metrics counters
+                          |
+                   [ KVStore ]
+                   std::shared_mutex
+                   unordered_map + LRU list
+                    /              \
+             [ LRU Cache ]    [ Persistence ]
+             O(1) eviction    snapshot to disk
+                    \
+             [ Thread Pool ]
+             worker threads
 ```
 
 ---
@@ -40,19 +40,21 @@ Clients connect over TCP and issue `SET`, `GET`, `DEL`, and `STATS` commands aga
 - **Real-time metrics** — hit rate, miss rate, command counts via `STATS` command
 - **File persistence** — data saved to disk on shutdown, loaded on startup
 - **Graceful shutdown** — handles `SIGINT`/`SIGTERM`, no data loss on Ctrl+C or kill
+- **Docker support** — containerized with volume-based persistence
 
 ---
 
 ## Commands
 
-| Command | Example | Response |
-|---|---|---|
-| `SET key value` | `SET name sreekar` | `OK` |
-| `GET key` | `GET name` | `sreekar` or `NULL` |
-| `DEL key` | `DEL name` | `OK` |
-| `STATS` | `STATS` | hit rate, miss rate, command counts |
+| Command         | Example            | Response                            |
+| --------------- | ------------------ | ----------------------------------- |
+| `SET key value` | `SET name sreekar` | `OK`                                |
+| `GET key`       | `GET name`         | `sreekar` or `NULL`                 |
+| `DEL key`       | `DEL name`         | `OK`                                |
+| `STATS`         | `STATS`            | hit rate, miss rate, command counts |
 
 ### Example STATS output
+
 ```
 total_commands : 5
 total_sets     : 2
@@ -68,7 +70,7 @@ hit_rate       : 50%
 
 Requires: `g++` with C++17, CMake 3.10+, POSIX system (Linux / Cygwin)
 
-```bash
+```
 mkdir build
 cd build
 cmake ..
@@ -82,16 +84,19 @@ This builds five binaries: `server`, `client`, `fastkv`, `test`, `benchmark`
 ## Run
 
 **Start the server:**
-```bash
+
+```
 ./build/server
 ```
 
 **Connect a client:**
-```bash
+
+```
 ./build/client
 ```
 
 **Shut down cleanly** (data is saved to `fastkvs_data.txt`):
+
 ```
 Ctrl+C
 ```
@@ -100,14 +105,41 @@ On next startup, data is automatically reloaded from disk.
 
 ---
 
+## Docker
+
+Requires: Docker Desktop
+
+**Build and run with docker compose:**
+
+```
+docker compose up --build
+```
+
+**Or run directly with a named volume for persistence:**
+
+```
+docker volume create kvdata
+docker run --rm -p 7379:7379 -v kvdata:/app fastkvs_project-fastkvs ./server
+```
+
+**Stop gracefully (data is saved before container exits):**
+
+```
+docker compose stop
+```
+
+Data persists across container restarts via the Docker volume mount. The server handles `SIGTERM` from Docker and saves all data to disk before shutting down.
+
+---
+
 ## Benchmarks
 
-| Scenario | Threads | Throughput |
-|---|---|---|
-| Single-thread GET | 1 | 1,369,860 ops/sec |
-| Single-thread PUT | 1 | 636,943 ops/sec |
-| Multi-thread PUT | 4 | 94,428 ops/sec |
-| Multi-thread Mixed (80% GET / 20% PUT) | 4 | 133,869 ops/sec |
+| Scenario                               | Threads | Throughput        |
+| -------------------------------------- | ------- | ----------------- |
+| Single-thread GET                      | 1       | 1,369,860 ops/sec |
+| Single-thread PUT                      | 1       | 636,943 ops/sec   |
+| Multi-thread PUT                       | 4       | 94,428 ops/sec    |
+| Multi-thread Mixed (80% GET / 20% PUT) | 4       | 133,869 ops/sec   |
 
 ---
 
@@ -117,6 +149,9 @@ On next startup, data is automatically reloaded from disk.
 fastkvs/
 ├── server.cpp              # TCP server — accepts clients, parses commands, tracks metrics
 ├── client.cpp              # TCP client — connects and sends commands
+├── Dockerfile              # Multi-stage build — compile and run stages
+├── docker-compose.yml      # Docker compose with volume persistence
+├── .dockerignore           # Excludes build/ and .git/ from Docker context
 ├── src/
 │   ├── kvstore.h/cpp       # Core key-value store
 │   ├── lru_cache.h/cpp     # LRU eviction logic
@@ -142,11 +177,12 @@ fastkvs/
 - Server spawns one `std::thread` per client connection — all threads share one KVStore instance safely
 - `std::atomic<bool>` flag for clean shutdown signaling across threads
 - `std::atomic<uint64_t>` counters for metrics — thread-safe increments with no mutex overhead
+- `select()` based accept loop — checks shutdown flag every 2 seconds so SIGTERM is handled cleanly
 
 ---
 
 ## Future Improvements
 
 - **Lock striping** — partition KVStore into N shards each with its own mutex, reducing contention under high concurrency
-- **Sharded architecture** — multiple KVStore instances across threads for horizontal scalability
+- **Thread pool for clients** — route client connections through existing ThreadPool instead of unbounded thread creation
 - **Async background persistence** — write to disk on a background thread instead of blocking on shutdown
