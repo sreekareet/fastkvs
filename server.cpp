@@ -127,22 +127,39 @@ std::string handle_command(const std::string& raw, KVStore& store) {
 }
 
 // -------------------------------------------------------
+// HELPER: Read one complete line from a TCP socket
+// -------------------------------------------------------
+// TCP is a streaming protocol — one send() on the client
+// side does not guarantee one recv() on the server side.
+// Data can arrive in chunks. We loop reading one byte at
+// a time until we see '\n' which marks end of command.
+std::string read_line(int fd) {
+    std::string line;
+    char c;
+    while (true) {
+        int n = read(fd, &c, 1);
+        if (n <= 0) return ""; // client disconnected or error
+        if (c == '\n') break;  // full command received
+        if (c != '\r') line += c; // skip \r for Windows clients
+    }
+    return line;
+}
+
+// -------------------------------------------------------
 // HELPER: Handle one client — runs in its own thread
 // -------------------------------------------------------
 void handle_client(int client_fd, KVStore& store) {
-    char buffer[1024];
 
     while (running) {
-        memset(buffer, 0, sizeof(buffer));
-        int bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+        std::string line = read_line(client_fd);
 
-        if (bytes_read <= 0) {
+        if (line.empty()) {
             std::cout << "Client disconnected.\n";
             break;
         }
 
-        std::cout << "Received: " << buffer;
-        std::string response = handle_command(std::string(buffer), store);
+        std::cout << "Received: " << line << "\n";
+        std::string response = handle_command(line, store);
         ssize_t written = write(client_fd, response.c_str(), response.size());
         if (written < 0) {
             std::cerr << "Write failed: " << strerror(errno) << "\n";
