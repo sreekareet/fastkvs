@@ -47,7 +47,13 @@ void ThreadPool::enqueue(std::function<void()> task) {
 }
 
 ThreadPool::~ThreadPool() {
-    stopflag = true; //atomic write, no lock needed
+
+    // Must hold w_mutex when writing stopflag to avoid lost wakeup
+    // with condition_variable. Atomic alone is not sufficient here.
+    {
+        std::unique_lock<std::mutex> lock(w_mutex);
+        stopflag = true; 
+    }
     condition.notify_all();
 
     for (auto& thread : vworkers) {

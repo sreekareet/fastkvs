@@ -7,7 +7,6 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
-#include <atomic>
 
 class ThreadPool {
 public:
@@ -24,7 +23,7 @@ private:
 
     std::mutex w_mutex;
     std::condition_variable condition;
-    std::atomic<bool> stopflag;
+    bool stopflag;
 };
 
 #endif
